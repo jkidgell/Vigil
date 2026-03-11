@@ -1,6 +1,6 @@
 use crate::db::repository::{
-    delete_node, get_all_nodes, get_polls_for_node, insert_node, insert_poll, insert_poll_result,
-    update_node_status,
+    delete_node, get_all_nodes, get_poll_results, get_polls_for_node, insert_node, insert_poll,
+    insert_poll_result, update_node_status,
 };
 use crate::engine::dependency::recompute_all_effective_statuses;
 use crate::engine::scheduler::Scheduler;
@@ -53,6 +53,11 @@ pub enum EngineCommand {
     GetStatus {
         node_id: Uuid,
         reply: oneshot::Sender<Option<(NodeStatus, EffectiveStatus)>>,
+    },
+    GetPollResults {
+        node_id: Uuid,
+        limit: usize,
+        reply: oneshot::Sender<Result<Vec<PollResult>, EngineError>>,
     },
     Shutdown,
 }
@@ -120,6 +125,25 @@ impl EngineHandle {
         let (tx, rx) = oneshot::channel();
         let _ = self.cmd_tx.send(EngineCommand::GetStatus { node_id, reply: tx }).await;
         rx.await.ok().flatten()
+    }
+
+    /// Get recent poll results for a node (up to `limit`).
+    pub async fn get_poll_results(
+        &self,
+        node_id: Uuid,
+        limit: usize,
+    ) -> Result<Vec<PollResult>, EngineError> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .cmd_tx
+            .send(EngineCommand::GetPollResults { node_id, limit, reply: tx })
+            .await;
+        rx.await.unwrap_or_else(|_| Ok(vec![]))
+    }
+
+    /// Clone the underlying cancellation token (for axum graceful shutdown).
+    pub fn shutdown_token(&self) -> tokio_util::sync::CancellationToken {
+        self.shutdown.clone()
     }
 }
 
@@ -352,6 +376,10 @@ impl Engine {
             EngineCommand::GetStatus { node_id, reply } => {
                 let status = self.nodes.get(&node_id).map(|n| (n.status, n.effective_status));
                 let _ = reply.send(status);
+            }
+            EngineCommand::GetPollResults { node_id, limit, reply } => {
+                let result = get_poll_results(&self.db, &node_id, limit).map_err(EngineError::Db);
+                let _ = reply.send(result);
             }
             EngineCommand::Shutdown => {
                 // Handled by the run loop directly; nothing to do here.

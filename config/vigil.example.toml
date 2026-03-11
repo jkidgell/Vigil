@@ -1,0 +1,29 @@
+# Vigil configuration file
+# Copy to /etc/vigil/vigil.toml and adjust as needed.
+# CLI flags override config values; env vars override config values too.
+
+[engine]
+# Path to the SQLite database file.
+# Env override: VIGIL_DB_PATH
+db_path = "/var/lib/vigil/vigil.db"
+
+# Maximum number of polls that may run concurrently (spec §5).
+max_concurrent_polls = 128
+
+# How often the scheduler tick fires, in milliseconds.
+tick_interval_ms = 100
+
+# How many days of poll results to retain before purging (spec §7).
+retention_days = 30
+
+[api]
+# Address and port the REST API listens on.
+# Spec §8: localhost by default — no unauthenticated remote access.
+# Env override: VIGIL_BIND_ADDRESS
+bind_address = "127.0.0.1:3030"
+
+[logging]
+# Log level: trace | debug | info | warn | error
+# Env override: VIGIL_LOG_LEVEL
+# CLI override: -v (debug), -vv (trace)
+level = "info"

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vigil</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+    header { background: #1a1d27; border-bottom: 1px solid #2d3148; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: 0.05em; color: #a78bfa; }
+    #stats-bar { display: flex; gap: 24px; margin-left: auto; font-size: 0.85rem; color: #94a3b8; }
+    #stats-bar span { display: flex; align-items: center; gap: 6px; }
+    #stats-bar strong { color: #e2e8f0; }
+
+    main { padding: 24px; }
+
+    .section-title { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #64748b; margin-bottom: 12px; }
+
+    table { width: 100%; border-collapse: collapse; background: #1a1d27; border-radius: 8px; overflow: hidden; }
+    thead { background: #12141e; }
+    th { padding: 10px 16px; text-align: left; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #64748b; }
+    td { padding: 12px 16px; font-size: 0.875rem; border-top: 1px solid #1e2235; }
+    tbody tr { cursor: pointer; transition: background 0.1s; }
+    tbody tr:hover { background: #1e2235; }
+    tbody tr.selected { background: #1e2640; }
+
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.03em; }
+    .badge-up         { background: #052e16; color: #4ade80; }
+    .badge-down       { background: #2d0a0a; color: #f87171; }
+    .badge-unknown    { background: #1c1c2e; color: #94a3b8; }
+    .badge-suppressed { background: #1a1400; color: #facc15; }
+    .badge-degraded   { background: #1c1200; color: #fb923c; }
+
+    .latency { color: #94a3b8; font-variant-numeric: tabular-nums; }
+    .latency.fast { color: #4ade80; }
+    .latency.slow { color: #fb923c; }
+    .latency.fail { color: #f87171; }
+
+    .address-list { color: #94a3b8; font-size: 0.8rem; }
+
+    #detail-panel { margin-top: 24px; background: #1a1d27; border-radius: 8px; overflow: hidden; display: none; }
+    #detail-panel.visible { display: block; }
+    #detail-header { background: #12141e; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+    #detail-header h2 { font-size: 0.9rem; font-weight: 600; color: #e2e8f0; }
+    #detail-header button { margin-left: auto; background: none; border: none; color: #64748b; cursor: pointer; font-size: 1rem; line-height: 1; }
+    #detail-header button:hover { color: #e2e8f0; }
+
+    #results-table { width: 100%; border-collapse: collapse; }
+    #results-table th { padding: 8px 16px; text-align: left; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #64748b; }
+    #results-table td { padding: 10px 16px; font-size: 0.8rem; border-top: 1px solid #1e2235; font-variant-numeric: tabular-nums; }
+
+    .success-yes { color: #4ade80; }
+    .success-no  { color: #f87171; }
+    .error-msg   { color: #f87171; font-size: 0.75rem; }
+
+    #refresh-indicator { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; display: inline-block; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .empty-state { text-align: center; padding: 48px; color: #4b5563; font-size: 0.875rem; }
+
+    #error-banner { display: none; background: #2d0a0a; border: 1px solid #7f1d1d; color: #fca5a5; padding: 10px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 0.875rem; }
+    #error-banner.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span id="refresh-indicator"></span>
+  <h1>Vigil</h1>
+  <div id="stats-bar">
+    <span>Nodes: <strong id="stat-nodes">—</strong></span>
+    <span>Uptime: <strong id="stat-uptime">—</strong></span>
+    <span id="stat-time" style="color:#4b5563; font-size:0.8rem"></span>
+  </div>
+</header>
+
+<main>
+  <div id="error-banner"></div>
+
+  <p class="section-title">Monitored Nodes</p>
+  <table id="nodes-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Addresses</th>
+        <th>Status</th>
+        <th>Effective</th>
+        <th>Latency</th>
+        <th>Consec.</th>
+      </tr>
+    </thead>
+    <tbody id="nodes-tbody">
+      <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+    </tbody>
+  </table>
+
+  <div id="detail-panel">
+    <div id="detail-header">
+      <h2 id="detail-title">Poll results</h2>
+      <span id="detail-node-badge"></span>
+      <button onclick="closeDetail()" title="Close">✕</button>
+    </div>
+    <table id="results-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Result</th>
+          <th>Latency</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody id="results-tbody">
+        <tr><td colspan="4" class="empty-state">Select a node to view results</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+  const API = '/api/v1';
+  let selectedNodeId = null;
+  let nodeCache = {};
+
+  function badge(status) {
+    const s = (status || 'Unknown').toLowerCase();
+    const cls = s === 'up' ? 'badge-up'
+              : s === 'down' ? 'badge-down'
+              : s === 'suppressed' ? 'badge-suppressed'
+              : s === 'degraded' ? 'badge-degraded'
+              : 'badge-unknown';
+    return `<span class="badge ${cls}">${status}</span>`;
+  }
+
+  function latencyCell(ms) {
+    if (ms == null) return `<span class="latency fail">—</span>`;
+    const cls = ms < 50 ? 'fast' : ms < 200 ? '' : 'slow';
+    return `<span class="latency ${cls}">${ms.toFixed(1)} ms</span>`;
+  }
+
+  function formatUptime(secs) {
+    if (secs < 60) return `${secs}s`;
+    if (secs < 3600) return `${Math.floor(secs/60)}m ${secs%60}s`;
+    const h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60);
+    return `${h}h ${m}m`;
+  }
+
+  function formatTime(iso) {
+    const d = new Date(iso);
+    return d.toLocaleTimeString();
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-banner');
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+
+  function clearError() {
+    document.getElementById('error-banner').classList.remove('visible');
+  }
+
+  async function fetchNodes() {
+    const [nodesRes, statsRes] = await Promise.all([
+      fetch(`${API}/nodes`),
+      fetch(`${API}/stats`),
+    ]);
+    if (!nodesRes.ok || !statsRes.ok) throw new Error('API error');
+    return { nodes: await nodesRes.json(), stats: await statsRes.json() };
+  }
+
+  function renderNodes(nodes, stats) {
+    document.getElementById('stat-nodes').textContent = stats.node_count;
+    document.getElementById('stat-uptime').textContent = formatUptime(stats.engine_uptime_secs);
+    document.getElementById('stat-time').textContent = new Date().toLocaleTimeString();
+
+    const tbody = document.getElementById('nodes-tbody');
+    if (nodes.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No nodes configured. Use the REST API or CLI to add nodes.</td></tr>`;
+      return;
+    }
+
+    // Update cache and remember latencies from previous results
+    const latencies = {};
+    nodes.forEach(n => { latencies[n.id] = nodeCache[n.id]?.latency ?? null; });
+    nodeCache = {};
+    nodes.forEach(n => { nodeCache[n.id] = n; });
+
+    tbody.innerHTML = nodes.map(n => {
+      const lat = latencies[n.id];
+      const consec = n.consecutive_failures > 0
+        ? `<span style="color:#f87171">✗${n.consecutive_failures}</span>`
+        : n.consecutive_successes > 0
+          ? `<span style="color:#4ade80">✓${n.consecutive_successes}</span>`
+          : '—';
+      const sel = n.id === selectedNodeId ? ' class="selected"' : '';
+      return `<tr${sel} onclick="selectNode('${n.id}', '${escHtml(n.name)}')">
+        <td><strong>${escHtml(n.name)}</strong></td>
+        <td><span class="address-list">${n.addresses.map(escHtml).join(', ')}</span></td>
+        <td>${badge(n.status)}</td>
+        <td>${badge(n.effective_status)}</td>
+        <td>${latencyCell(lat)}</td>
+        <td>${consec}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function fetchResults(nodeId) {
+    const res = await fetch(`${API}/nodes/${nodeId}/results`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    // Update latency cache with latest result
+    if (data.length > 0 && nodeCache[nodeId]) {
+      nodeCache[nodeId].latency = data[0].latency_ms;
+    }
+    return data;
+  }
+
+  function renderResults(results) {
+    const tbody = document.getElementById('results-tbody');
+    if (!results || results.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No results yet</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = results.slice(0, 20).map(r => `<tr>
+      <td>${formatTime(r.timestamp)}</td>
+      <td class="${r.success ? 'success-yes' : 'success-no'}">${r.success ? '✓ OK' : '✗ Fail'}</td>
+      <td>${latencyCell(r.latency_ms)}</td>
+      <td><span class="error-msg">${escHtml(r.error || '')}</span></td>
+    </tr>`).join('');
+  }
+
+  function selectNode(id, name) {
+    selectedNodeId = id;
+    document.getElementById('detail-title').textContent = name;
+    document.getElementById('detail-node-badge').innerHTML = badge(nodeCache[id]?.effective_status || 'Unknown');
+    document.getElementById('detail-panel').classList.add('visible');
+    document.querySelectorAll('#nodes-tbody tr').forEach(tr => tr.classList.remove('selected'));
+    event.currentTarget.classList.add('selected');
+    fetchResults(id).then(renderResults).catch(() => {});
+  }
+
+  function closeDetail() {
+    selectedNodeId = null;
+    document.getElementById('detail-panel').classList.remove('visible');
+    document.querySelectorAll('#nodes-tbody tr').forEach(tr => tr.classList.remove('selected'));
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  async function refresh() {
+    try {
+      const { nodes, stats } = await fetchNodes();
+      clearError();
+      renderNodes(nodes, stats);
+      if (selectedNodeId) {
+        const results = await fetchResults(selectedNodeId);
+        renderResults(results);
+      }
+    } catch (e) {
+      showError('Could not reach Vigil API — is the daemon running?');
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 5000);
+</script>
+</body>
+</html>

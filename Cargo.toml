@@ -20,6 +20,7 @@ surge-ping = "0.8"
 async-trait = "0.1"
 tokio-util = { version = "0.7", features = ["rt"] }
 anyhow = "1"
+tower-http = { version = "0.5", features = ["fs"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }

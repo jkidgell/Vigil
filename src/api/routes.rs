@@ -2,6 +2,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use tower_http::services::ServeDir;
 
 use crate::api::handlers::{
     add_poll, create_node, delete_node, get_node, get_node_results, get_node_status, get_stats,
@@ -18,4 +19,5 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/nodes/:id/polls", post(add_poll))
         .route("/api/v1/stats", get(get_stats))
         .with_state(state)
+        .fallback_service(ServeDir::new("static"))
 }
